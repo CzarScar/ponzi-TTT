@@ -6,6 +6,7 @@ contract PonziTTT {
     // ================== Owner list ====================
     // list of owners
     address[256] owners;
+    address[] trainees;
     // required lessons
     uint256 required;
     // index on the list of owners to allow reverse lookup
@@ -17,6 +18,11 @@ contract PonziTTT {
     mapping(address => uint256) traineeBalances;
     // ================== Trainee list ====================
     mapping(address => uint256) traineeProgress;
+
+    uint256 startBlock = block.number;
+    uint256 classHeight;
+    uint256 endBlock;
+    uint256 changedTime = 0;
 
     // EVENTS
 
@@ -46,6 +52,12 @@ contract PonziTTT {
         _;
     }
 
+    function setEndTime(uint256 height) onlyOwner {
+        require(changedTime < 2);
+        changedTime = 1;
+        classHeight = height;
+    }
+
     function isTrainee(address _addr) constant returns (bool) {
         return traineeBalances[_addr] > 0;
     }
@@ -64,8 +76,13 @@ contract PonziTTT {
         }
     }
 
+    function() payable notTrainee {
+        register();
+    }
+
     function register() payable notTrainee {
         require(msg.value == 2 ether);
+        trainees.push(msg.sender);
         traineeBalances[msg.sender] = msg.value;
         Registration(msg.sender, msg.value);
     }
@@ -102,6 +119,26 @@ contract PonziTTT {
         _recipient.transfer(traineeBalances[_recipient]);
         Refund(msg.sender, _recipient, traineeBalances[_recipient]);
         traineeBalances[_recipient] = 0;
+    }
+
+    function shareBalance() onlyOwner {
+        require(block.number == endBlock);
+        uint number = 0;
+        address[] finishedTrainee;
+        for ( uint index = 0; index < trainees.length; index++) {
+            if (traineeProgress[trainees[index]] >= required) {
+                number += 1;
+                finishedTrainee.push(trainees[index]);
+            }
+            traineeBalances[trainees[index]] = 0;
+        }
+        if (number > 0) {
+            uint256 sharedNum = this.balance / number;
+            for ( uint shareIndex = 0; index < finishedTrainee.length; index++) {
+                finishedTrainee[shareIndex].transfer(sharedNum);
+                Refund(msg.sender, finishedTrainee[shareIndex], sharedNum);
+            }
+        }
     }
 
     function destroy() onlyOwner {
